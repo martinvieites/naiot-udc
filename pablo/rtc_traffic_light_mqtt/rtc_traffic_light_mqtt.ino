@@ -6,10 +6,13 @@
 #include <PubSubClient.h>
 
 // CONSTANTES
-#define DAY_NIGHT_INTERRUPTION 12
+#define DAY_NIGHT_INTERRUPTION 16
 #define GREEN_LED 32
 #define YELLOW_LED 25
 #define RED_LED 27
+#define CAR_STATUS_MQTT_TOPIC "devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/car/status"
+#define DAY_NIGTH_MQTT_TOPIC "devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/day"
+
 const char* ssid = "LMDG";
 const char* password = "pabloRivada ";
 const char* mqttServer = "test.mosquitto.org";
@@ -21,62 +24,92 @@ const char* mqttPassword = "";
 WiFiClient espClient;
 PubSubClient client(espClient); 
 
-TaskHandle_t xTaskupdateMqtt = NULL;
+TaskHandle_t xTaskCheckClient = NULL;
 TaskHandle_t xTaskCheckMqtt = NULL;
 bool dia = true;
-int estado = 0;
 
-// FUNCIONES
-void TaskupdateMqttCode( void * pvParameters ) {
-  while (1) {
-    delay(10000);
-    // dia = true;
-    Serial.println("updateMqtt.Es de dia.");
-    client.publish("devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/dia", "1"); 
-    delay(10000);
+RTC_DS3231 rtc;
 
-    // dia = false;
-    Serial.println("updateMqtt.Es de noche.");
-    client.publish("devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/dia", "0"); 
-  }
+void onAlarm() {    
+  dia = !dia;
+  // client.publish(DAY_NIGTH_MQTT_TOPIC, ( dia ? "1" : "0" ));
 }
+
 // FUNCIONES
 void TaskCheckMqttCode( void * pvParameters ) {
   while (1) {
-        
-    // if (!client.connected()) {
-    //   reconnect();   
-    // }   
-    client.loop();
-    
-    if (!dia) {  // Modo noche
-      Serial.println("Es de noche. Me mantengo parpadeando en ambar");
+    if (!dia) {
+      client.publish(DAY_NIGTH_MQTT_TOPIC, "0");
+      Serial.println("Es de noche. Me mantengo parpadeando en ambar.");
+      rtc.clearAlarm(1);
+      digitalWrite(RED_LED, LOW);
+      digitalWrite(GREEN_LED, LOW);
+      // La alarma 1 se repite cada dia, cuando las horas marquen 9
+      if(!rtc.setAlarm1( DateTime(0, 0, 0, 7, 0, 0), DS3231_A1_Hour )) {
+          Serial.println("Alarma 1 no configurada");
+      } else {
+          Serial.println("Alarma 1 configurada correctamente");
+      }
+    }
+    while (!dia) {  // Modo noche
       digitalWrite(YELLOW_LED, HIGH);
       delay(500);
       digitalWrite(YELLOW_LED, LOW);
       delay(500);
     }
-  
+
+    if (dia) {
+      rtc.clearAlarm(1);
+      // La alarma 1 se repite cada dia, cuando las horas marquen 9
+      if(!rtc.setAlarm1( DateTime(0, 0, 0, 19, 0, 0), DS3231_A1_Hour )) {
+          Serial.println("Alarma 1 no configurada");
+      }else {
+          Serial.println("Alarma 1 configurada correctamente");
+      }
+    }
+
+    client.publish(DAY_NIGTH_MQTT_TOPIC, "1");
+    Serial.println("Es de dia. Esperando mensaje MQTT...");
+    digitalWrite(GREEN_LED, HIGH);
+    digitalWrite(YELLOW_LED, LOW);
+    digitalWrite(RED_LED, LOW);
+    
+    while (dia) {  // Modo dia
+      delay(1000);      
+    }
+  }
+}
+
+void TaskCheckMqttClientCode ( void * pvParameters ) {
+  while (1){
+    if (!client.connected()) {
+      reconnect();
+    }
+    client.loop();
+    delay(10000);
   }
 }
 
 void setNetwork() {
   WiFi.mode(WIFI_STA);
-  WiFi.begin("LMDG", "pabloRivada");
+  WiFi.begin("WifiClara", "alibaba11");
   Serial.print(F("Esperando red"));
+
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.print(F("."));
   }
+  
   Serial.println("WiFi listo.");
   client.setServer(mqttServer, mqttPort);
   client.setCallback(callback); 
+  
   while (!client.connected()) {
     Serial.println("Conectando ao broker MQTT...");
-    if (client.connect(
-        "PabloNapiotPrueba1",
-         mqttUser, mqttPassword ))
+
+    if (client.connect("PabloNapiotPrueb2", mqttUser, mqttPassword )) {
       Serial.println("Conectado ao broker MQTT!");
+    }
     else {
       Serial.print("Erro ao conectar co broker: ");
       Serial.print(client.state());
@@ -87,6 +120,38 @@ void setNetwork() {
   Serial.println("Red lista.");
 }
 
+void setRTC() {
+  while(!rtc.begin()) {
+    Serial.println("Couldn't find DS3231!");
+    delay(1000);
+  }
+  Serial.println("Conectado RTC");
+  if(rtc.lostPower()) {
+      // this will adjust to the date and time at compilation
+      rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
+
+  //we don't need the 32K Pin, so disable it
+  rtc.disable32K();
+  
+  // Making it so, that the alarm will trigger an interrupt
+  pinMode(DAY_NIGHT_INTERRUPTION, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(DAY_NIGHT_INTERRUPTION),
+                                        onAlarm, FALLING);
+
+  // set alarm 1, 2 flag to false (so alarm 1, 2 didn't happen so far)
+  // if not done, this easily leads to problems, as both register aren't reset on reboot/recompile
+  rtc.clearAlarm(1);
+  rtc.clearAlarm(2);
+  rtc.disableAlarm(2);
+
+  // stop oscillating signals at SQW Pin
+  // otherwise setAlarm1 will fail
+  rtc.writeSqwPinMode(DS3231_OFF);
+
+  dia = (rtc.now().hour() > 6 || rtc.now().hour() < 19);
+
+}
 
 // Función de callback que procesa as mensaxes MQTT recibidas 
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -95,10 +160,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print(topic);
   Serial.print("] ");
 
-  // TODO: No hacer print si es de noche
-  // if (!dia) {
-  //   return;
-  // }
+// // TODO: RETURN CUANDO NOCHE
+  if (!dia) {
+    return;
+  }
 
   String message;
   for (int i = 0; i < length; i++) {
@@ -178,10 +243,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
 void reconnect() {   
   while (!client.connected()) {     
     Serial.print("Intentando conectar a broker MQTT...");          // Inténtase conectar indicando o ID do dispositivo     
+    client.setServer(mqttServer, mqttPort);
+    client.setCallback(callback); 
     //IMPORTANTE: este ID debe ser único!     
-    if (client.connect("PabloNapiotPrueba1", mqttUser, mqttPassword)) {       
+    if (client.connect("PabloNapiotPrueba2", mqttUser, mqttPassword)) {       
       Serial.println("conectado!");              // Subscripción ao topic       
-      client.subscribe("devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/car/status");
       Serial.println("Subscrito ao topic");
     } else { 
       Serial.print("erro na conexión, erro=");       
@@ -189,6 +255,7 @@ void reconnect() {
       Serial.println(" probando de novo en 5 segundos");       
       delay(5000);     
     }   
+    client.subscribe("devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/car/status");
   } 
 }  
 
@@ -207,23 +274,14 @@ void setup() {
 
   //Conexion WiFi
   setNetwork();
+  setRTC();
   
   digitalWrite(GREEN_LED, LOW);
   digitalWrite(YELLOW_LED, LOW);
   digitalWrite(RED_LED, LOW);
-
-  // if (xTaskCreate(TaskupdateMqttCode,
-  //                 "Check MQTT",
-  //                 10000,
-  //                 NULL,
-  //                 1,
-  //                 &xTaskupdateMqtt)
-  //     != pdPASS) {
-  //   Serial.println("Error al crear tarea Update.");
-  // }
   
   if (xTaskCreate(TaskCheckMqttCode,
-                  "Check MQTT",
+                  "MQTT Car",
                   10000,
                   NULL,
                   1,
@@ -231,9 +289,17 @@ void setup() {
       != pdPASS) {
     Serial.println("Error al crear tarea Check.");
   }
+  if (xTaskCreate(TaskCheckMqttClientCode,
+                  "Reconnect MQTT",
+                  10000,
+                  NULL,
+                  1,
+                  &xTaskCheckClient)
+      != pdPASS) {
+    Serial.println("Error al crear tarea Check.");
+  }
 }
 
 void loop() {
-  
   
 }
