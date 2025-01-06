@@ -13,10 +13,11 @@
 #define CAR_STATUS_MQTT_TOPIC "devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/car/status"
 #define DAY_NIGTH_MQTT_TOPIC "devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/day"
 #define BROKER_FOG "172.16.10.133"
-#define CLOUDLET_FOG "172.16.10.112"
+#define BROKER_CLOUDLET "172.16.10.112"
+#define MAX_INTENTOS 1
 
-const char* ssid = "nome_da_rede";
-const char* password = "contrasinal_da_rede";
+const char* ssid = "Nome_wifi";
+const char* password = "contrasinal";
 const int mqttPort = 1883;
 const char* mqttUser = "";
 const char* mqttPassword = "";
@@ -209,7 +210,16 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 // Reconecta co broker MQTT se se perde a conexión 
 void reconnect() {   
-  while (!client.connected()) {     
+  int intentos_fog = 0;
+
+  while (!client.connected()) {
+    if (intentos_fog < MAX_INTENTOS) {
+      mqttServer = BROKER_FOG;
+      intentos_fog++;
+    } else {
+      mqttServer = BROKER_CLOUDLET;
+    }
+
     Serial.print("Intentando conectar a broker MQTT...");          // Inténtase conectar indicando o ID do dispositivo     
     client.setServer(mqttServer, mqttPort);
     client.setCallback(callback); 
