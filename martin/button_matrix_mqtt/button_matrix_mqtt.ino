@@ -2,9 +2,12 @@
 #include <PubSubClient.h>
 #include <CustomMatrix.h>
 
+#define BROKER_FOG "172.16.10.133"
+#define BROKER_CLOUDLET "172.16.10.112"
+#define MAX_INTENTOS 5
+
 const char* ssid = "";  // Substituír polo SSID da nosa rede WiFi
 const char* password = "";   // Substituír polo password da nosa rede WiFi
-const char* mqttServer = "172.16.10.112";
 const int mqttPort = 1883;
 const char* mqttUser = "";
 const char* mqttPassword = "";
@@ -34,19 +37,9 @@ void setup() {
     Serial.print(".");
   }
   Serial.println("Connectado á rede WiFi!");
-  client.setServer(mqttServer, mqttPort);
   client.setCallback(onMqttReceived);
 
-  while (!client.connected()) {
-    Serial.println("Conectando ao broker MQTT...");
-    if (client.connect("nodonapiotmartin", mqttUser, mqttPassword))
-      Serial.println("Conectado ao broker MQTT!");
-    else {
-      Serial.print("Erro ao conectar co broker: ");
-      Serial.println(client.state());
-      delay(2000);
-    }
-  }
+  reconnect();
   client.subscribe("devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/countdown/action");
 }
 
@@ -107,14 +100,25 @@ void countdown() {
 }
 
 void reconnect() {
+  int intentos_fog = 0;
+  char* broker = "";
+
   while (!client.connected()) {
+    if (intentos_fog < MAX_INTENTOS) {
+      broker = BROKER_FOG;
+      intentos_fog++;
+    } else {
+      broker = BROKER_CLOUDLET;
+    }
+
+    client.setServer(broker, mqttPort);
     Serial.print("Intentando conectar a broker MQTT...");
     if (client.connect("nodonapiotmartin")) {
-      Serial.println("conectado!");
+      Serial.println("Conectado!");
       client.subscribe("devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/countdown/action");
       Serial.println("Subscrito ao topic");
     } else {
-      Serial.print("erro na conexión, erro=");
+      Serial.print("Erro na conexión, erro=");
       Serial.print(client.state());
       Serial.println(" probando de novo en 5 segundos");
       delay(5000);
