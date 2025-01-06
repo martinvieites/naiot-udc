@@ -6,8 +6,8 @@
 #define BROKER_CLOUDLET "172.16.10.112"
 #define MAX_INTENTOS 5
 
-const char* ssid = "Movistar_58AA";  // Substituír polo SSID da nosa rede WiFi
-const char* password = "C100CPB.";   // Substituír polo password da nosa rede WiFi
+const char* ssid = "";  // Substituír polo SSID da nosa rede WiFi
+const char* password = "";   // Substituír polo password da nosa rede WiFi
 const int mqttPort = 1883;
 const char* mqttUser = "";
 const char* mqttPassword = "";
