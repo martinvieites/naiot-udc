@@ -12,10 +12,11 @@
 #define RED_LED 27
 #define CAR_STATUS_MQTT_TOPIC "devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/car/status"
 #define DAY_NIGTH_MQTT_TOPIC "devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/day"
+#define BROKER_FOG "172.16.10.133"
+#define CLOUDLET_FOG "172.16.10.112"
 
-const char* ssid = "LMDG";
-const char* password = "pabloRivada ";
-const char* mqttServer = "test.mosquitto.org";
+const char* ssid = "nome_da_rede";
+const char* password = "contrasinal_da_rede";
 const int mqttPort = 1883;
 const char* mqttUser = "";
 const char* mqttPassword = "";
@@ -23,20 +24,20 @@ const char* mqttPassword = "";
 // VARIABLES 
 WiFiClient espClient;
 PubSubClient client(espClient); 
+char* mqttServer = "172.16.10.133";
 
-TaskHandle_t xTaskCheckClient = NULL;
-TaskHandle_t xTaskCheckMqtt = NULL;
+TaskHandle_t xTaskKeepClientConnected = NULL;
+TaskHandle_t xTaskManageDayNight = NULL;
 bool dia = true;
 
 RTC_DS3231 rtc;
 
 void onAlarm() {    
   dia = !dia;
-  // client.publish(DAY_NIGTH_MQTT_TOPIC, ( dia ? "1" : "0" ));
 }
 
 // FUNCIONES
-void TaskCheckMqttCode( void * pvParameters ) {
+void TaskManageDayNightCode( void * pvParameters ) {
   while (1) {
     if (!dia) {
       client.publish(DAY_NIGTH_MQTT_TOPIC, "0");
@@ -80,7 +81,7 @@ void TaskCheckMqttCode( void * pvParameters ) {
   }
 }
 
-void TaskCheckMqttClientCode ( void * pvParameters ) {
+void TaskKeepClientConnectedCode ( void * pvParameters ) {
   while (1){
     if (!client.connected()) {
       reconnect();
@@ -92,7 +93,7 @@ void TaskCheckMqttClientCode ( void * pvParameters ) {
 
 void setNetwork() {
   WiFi.mode(WIFI_STA);
-  WiFi.begin("WifiClara", "alibaba11");
+  WiFi.begin(ssid, password);
   Serial.print(F("Esperando red"));
 
   while (WiFi.status() != WL_CONNECTED) {
@@ -204,39 +205,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
   digitalWrite(RED_LED, HIGH);
   
   return;
-  // switch (message.toInt()) {
-  //   case 0: // verde
-  //     {
-  //       digitalWrite(GREEN_LED, HIGH);
-  //       digitalWrite(YELLOW_LED, LOW);
-  //       digitalWrite(RED_LED, LOW);
-  //     }
-  //   case 1: // amarillo
-  //     {
-  //       digitalWrite(GREEN_LED, LOW);
-  //       digitalWrite(YELLOW_LED, HIGH);
-  //       digitalWrite(RED_LED, LOW);
-  //     }
-  //   case 2: // rojo
-  //     {
-  //       digitalWrite(GREEN_LED, LOW);
-  //       digitalWrite(YELLOW_LED, LOW);
-  //       digitalWrite(RED_LED, HIGH);
-  //     }
-  //   case 3: //apagado
-  //     {
-  //       digitalWrite(GREEN_LED, LOW);
-  //       digitalWrite(YELLOW_LED, LOW);
-  //       digitalWrite(RED_LED, LOW);
-  //     }
-  //   default:
-  //   {
-  //       digitalWrite(GREEN_LED, HIGH);
-  //       digitalWrite(YELLOW_LED, HIGH);
-  //       digitalWrite(RED_LED, HIGH);
-
-  //   }
-  // }
 }
 
 // Reconecta co broker MQTT se se perde a conexión 
@@ -280,21 +248,21 @@ void setup() {
   digitalWrite(YELLOW_LED, LOW);
   digitalWrite(RED_LED, LOW);
   
-  if (xTaskCreate(TaskCheckMqttCode,
+  if (xTaskCreate(TaskManageDayNightCode,
                   "MQTT Car",
                   10000,
                   NULL,
                   1,
-                  &xTaskCheckMqtt)
+                  &xTaskManageDayNight)
       != pdPASS) {
     Serial.println("Error al crear tarea Check.");
   }
-  if (xTaskCreate(TaskCheckMqttClientCode,
+  if (xTaskCreate(TaskKeepClientConnectedCode,
                   "Reconnect MQTT",
                   10000,
                   NULL,
                   1,
-                  &xTaskCheckClient)
+                  &xTaskKeepClientConnected)
       != pdPASS) {
     Serial.println("Error al crear tarea Check.");
   }
