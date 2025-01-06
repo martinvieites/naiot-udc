@@ -2,7 +2,7 @@
 #include <PubSubClient.h>
 
 // constantes
-#define PEDESTRIAN_GREEN_STATUS "0"
+#define BUZZER_STATUS "1"
 #define PUB_DELAY 5000
 
 // Credenciais da rede Wifi
@@ -10,9 +10,10 @@ const char* ssid = "";
 const char* password = "";
 
 // Configuración do broker MQTT
-const char* mqtt_server = "test.mosquitto.org";
+const char* mqtt_server = "172.16.10.112";
 const int mqtt_port = 1883;
-const char* mqtt_topic = "devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/pedestrian/status";
+
+const char* mqtt_topic = "devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/buzzer/status";
 
 int buzzerPin = 33;  // buzzer: pin señal a IO33
 int inputPin = 27;   // sensor ultrasonidos: pin ECHO a IO27
@@ -62,7 +63,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.println(message);
 
   // dependiendo del mensaje recibido se activa flag que enciende zumbado
-  if (message == PEDESTRIAN_GREEN_STATUS) {
+  if (message == BUZZER_STATUS) {
     buzzerFlag = 1;
   } else {
     buzzerFlag = 0;
