@@ -4,7 +4,7 @@
 
 const char* ssid = "";  // Substituír polo SSID da nosa rede WiFi
 const char* password = "";   // Substituír polo password da nosa rede WiFi
-const char* mqttServer = "test.mosquitto.org";
+const char* mqttServer = "172.16.10.112";
 const int mqttPort = 1883;
 const char* mqttUser = "";
 const char* mqttPassword = "";
