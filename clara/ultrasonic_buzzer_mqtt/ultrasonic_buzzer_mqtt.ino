@@ -4,13 +4,15 @@
 // constantes
 #define BUZZER_STATUS "1"
 #define PUB_DELAY 5000
+#define MAX_INTENTOS_FOG 5
 
 // Credenciais da rede Wifi
 const char* ssid = "";
 const char* password = "";
 
 // Configuración do broker MQTT
-const char* mqtt_server = "172.16.10.112";
+const char* mqtt_server_fog = "172.16.10.133";
+const char* mqtt_server_cloudlet = "172.16.10.112";
 const int mqtt_port = 1883;
 
 const char* mqtt_topic = "devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/buzzer/status";
@@ -20,9 +22,6 @@ int inputPin = 27;   // sensor ultrasonidos: pin ECHO a IO27
 int outputPin = 25;  // sensor ultrasonidos: pin TRIG a IO25
 
 int buzzerFlag = 0;  // activado:1 desactivado:0
-
-// Led que se acenderá/apagará
-/*const int ledPin = LED_BUILTIN;*/
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -72,8 +71,22 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 // Reconecta co broker MQTT se se perde a conexión
 void reconnect() {
+  // flags intentos
+  int intentos_fog = 0;
+
+  // Configuración de MQTT
+  client.setServer(mqtt_server_fog, mqtt_port);
+  intentos_fog++;
+
   while (!client.connected()) {
     Serial.print("Intentando conectar a broker MQTT...");
+    if(intentos_fog <= MAX_INTENTOS_FOG){
+      intentos_fog++;
+      Serial.println(mqtt_server_fog);
+    }else{
+      client.setServer(mqtt_server_cloudlet, mqtt_port);
+      Serial.println(mqtt_server_cloudlet);
+    }
     // Inténtase conectar indicando o ID do dispositivo
     //IMPORTANTE: este ID debe ser único!
     if (client.connect("NAPIoT-P2-Rec-Clara")) {
@@ -127,12 +140,15 @@ void taskUltrasonicMqtt(void* pvParameters) {
     digitalWrite(outputPin, LOW);
     distance = pulseIn(inputPin, HIGH);                 // Read receiver pulse time
     distance = distance / 58;                           // Transform pulse time to distance
-    Serial.print("Publicando distancia: ");
-    Serial.println(distance);  // Output distance
 
-    // publico en mqtt
-    sprintf(str, "%u", distance);
-    client.publish("devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/carDistance", str);  // Usar o mesmo topic que en Node-RED
+    if (client.connected()) {
+      Serial.print("Publicando distancia: ");
+      Serial.println(distance);  // Output distance
+
+      // publico en mqtt
+      sprintf(str, "%u", distance);
+      client.publish("devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/carDistance", str);  // Usar o mesmo topic que en Node-RED
+    }
 
     delay(PUB_DELAY);
   }
@@ -141,7 +157,7 @@ void taskUltrasonicMqtt(void* pvParameters) {
 
 void setup() {
   // Configuracion pin buzzer
-  pinMode(buzzerPin, OUTPUT);  // set digital IO pin pattern, OUTPUT tobe output
+  pinMode(buzzerPin, OUTPUT);  // set digital IO pin pattern, OUTPUT to be output
 
   // COnfiguracion pines ultrasonido
   pinMode(inputPin, INPUT);
@@ -153,8 +169,7 @@ void setup() {
   // Conexión coa WiFi
   setup_wifi();
 
-  // Configuración de MQTT
-  client.setServer(mqtt_server, mqtt_port);
+  // configuracion MQTT
   client.setCallback(callback);
 
   // se crea tarea que lee valor de disancia y lo publica en mqtt
