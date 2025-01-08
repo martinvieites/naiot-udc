@@ -2,11 +2,14 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 
+#define MAX_INTENTOS_FOG 5
+
 // Credenciais da rede Wifi
-const char* ssid = "Nina Note 10 Pro"; // Substituir polo nome da nosa rede Wifi
-const char* password = "ninasanz0311*"; // Substituir por password da nosa rede Wifi
+const char* ssid = ""; // Substituir polo nome da nosa rede Wifi
+const char* password = ""; // Substituir por password da nosa rede Wifi
 // Configuración do broker MQTT
-const char* mqtt_server = "test.mosquitto.org";
+const char* mqtt_server_cloudlet = "192.168.200.39";
+const char* mqtt_server_fog = "172.16.10.133";
 const int mqtt_port = 1883;
 const char* mqtt_topic = "devices/es/udc/MUIoT-NAPIoT/SmartTrafficLight/pedestrian/status";
 
@@ -81,24 +84,40 @@ void setColor(int red, int green, int blue) {
 }
 
 // Reconecta co broker MQTT se se perde a conexión
+// Reconecta co broker MQTT se se perde a conexión
 void reconnect() {
+  // flags intentos
+  int intentos_fog = 0;
+
+  // Configuración de MQTT
+  client.setServer(mqtt_server_fog, mqtt_port);
+  intentos_fog++;
+
   while (!client.connected()) {
     Serial.print("Intentando conectar a broker MQTT...");
+    if(intentos_fog <= MAX_INTENTOS_FOG){
+      intentos_fog++;
+      Serial.println(mqtt_server_fog);
+    }else{
+      client.setServer(mqtt_server_cloudlet, mqtt_port);
+      Serial.println(mqtt_server_cloudlet);
+    }
     // Inténtase conectar indicando o ID do dispositivo
     //IMPORTANTE: este ID debe ser único!
-    if (client.connect("NODO5MUIoT-NAPIoT")) {
+    if (client.connect("NAPIoT-P5-Ana")) {
       Serial.println("conectado!");
       // Subscripción ao topic
       client.subscribe(mqtt_topic);
-      Serial.println("Subscrito a topic");
+      Serial.println("Subscrito ao topic");
     } else {
-      Serial.print("error en la conexión, erro=");
+      Serial.print("erro na conexión, erro=");
       Serial.print(client.state());
-      Serial.println(" probando de nuevo en 5 segundos");
+      Serial.println(" probando de novo en 5 segundos");
       delay(5000);
     }
   }
 }
+
 void setup() {
   // Configuración do pin do LED
  // pinMode(ledPin, OUTPUT);
@@ -108,7 +127,7 @@ void setup() {
   // Conexión coa WiFi
   setup_wifi();
   // Configuración de MQTT
-  client.setServer(mqtt_server, mqtt_port);
+  client.setServer(mqtt_server_cloudlet, mqtt_port);
   client.setCallback(callback);
   }
   void loop() {
@@ -130,3 +149,4 @@ void setup() {
   Serial.println(str);
   delay(5000);
 }
+
